@@ -1,0 +1,157 @@
+name: Build Ray Images
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "images/**"
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+  OWNER: ihoholko
+
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+
+    outputs:
+      ray-cpu: ${{ steps.filter.outputs.ray-cpu }}
+      # ray-gpu: ${{ steps.filter.outputs.ray-gpu }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Detect changed images
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            ray-cpu:
+              - 'images/ray-cpu/**'
+
+          # ray-gpu:
+          #   - 'images/ray-gpu/**'
+
+  ray-cpu:
+    needs: changes
+    if: needs.changes.outputs.ray-cpu == 'true'
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Read version
+        id: version
+        shell: bash
+        run: |
+          VERSION="$(cat images/ray-cpu/VERSION)"
+
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Invalid ray-cpu version: $VERSION"
+            exit 1
+          fi
+
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: images/ray-cpu/Dockerfile
+          load: true
+          tags: |
+            ray-cpu:test
+          cache-from: type=gha,scope=ray-cpu
+          cache-to: type=gha,mode=max,scope=ray-cpu
+
+      - name: Tag release
+        run: |
+          docker tag \
+            ray-cpu:test \
+            ${{ env.REGISTRY }}/${{ env.OWNER }}/ray-cpu:${{ steps.version.outputs.version }}
+
+          docker tag \
+            ray-cpu:test \
+            ${{ env.REGISTRY }}/${{ env.OWNER }}/ray-cpu:sha-${{ github.sha }}
+
+      - name: Push release
+        run: |
+          docker push \
+            ${{ env.REGISTRY }}/${{ env.OWNER }}/ray-cpu:${{ steps.version.outputs.version }}
+
+          docker push \
+            ${{ env.REGISTRY }}/${{ env.OWNER }}/ray-cpu:sha-${{ github.sha }}
+
+  # ray-gpu:
+  #   needs: changes
+  #   if: needs.changes.outputs.ray-gpu == 'true'
+
+  #   runs-on: ubuntu-latest
+
+  #   steps:
+  #     - name: Checkout
+  #       uses: actions/checkout@v4
+
+  #     - name: Read version
+  #       id: version
+  #       shell: bash
+  #       run: |
+  #         VERSION="$(cat images/ray-gpu/VERSION)"
+
+  #         if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+  #           echo "Invalid ray-gpu version: $VERSION"
+  #           exit 1
+  #         fi
+
+  #         echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+  #     - name: Login to GHCR
+  #       uses: docker/login-action@v3
+  #       with:
+  #         registry: ghcr.io
+  #         username: ${{ github.actor }}
+  #         password: ${{ secrets.GITHUB_TOKEN }}
+
+  #     - name: Build image
+  #       uses: docker/build-push-action@v6
+  #       with:
+  #         context: .
+  #         file: images/ray-gpu/Dockerfile
+  #         load: true
+  #         tags: |
+  #           ray-gpu:test
+  #         cache-from: type=gha,scope=ray-gpu
+  #         cache-to: type=gha,mode=max,scope=ray-gpu
+
+  #     - name: Tag release
+  #       run: |
+  #         docker tag \
+  #           ray-gpu:test \
+  #           ${{ env.REGISTRY }}/${{ env.OWNER }}/ray-gpu:${{ steps.version.outputs.version }}
+
+  #         docker tag \
+  #           ray-gpu:test \
+  #           ${{ env.REGISTRY }}/${{ env.OWNER }}/ray-gpu:sha-${{ github.sha }}
+
+  #     - name: Push release
+  #       run: |
+  #         docker push \
+  #           ${{ env.REGISTRY }}/${{ env.OWNER }}/ray-gpu:${{ steps.version.outputs.version }}
+
+  #         docker push \
+  #           ${{ env.REGISTRY }}/${{ env.OWNER }}/ray-gpu:sha-${{ github.sha }}

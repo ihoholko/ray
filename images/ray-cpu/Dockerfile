@@ -1,4 +1,4 @@
-FROM rayproject/ray:2.56.1-py311
+FROM rayproject/ray:2.56.1-py312
 
 USER root
 

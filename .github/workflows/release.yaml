@@ -88,6 +88,31 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Reject an already published version
+        if: steps.gate.outputs.build == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          IMAGE: ${{ matrix.image }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          TAGS_ERROR="$RUNNER_TEMP/package-tags-error"
+          if ! TAGS="$(gh api --paginate \
+            "/users/${OWNER}/packages/container/${IMAGE}/versions" \
+            --jq '.[].metadata.container.tags[]?' 2>"$TAGS_ERROR")"; then
+            if grep -q 'HTTP 404' "$TAGS_ERROR"; then
+              TAGS=""
+            else
+              cat "$TAGS_ERROR" >&2
+              exit 1
+            fi
+          fi
+
+          if grep -Fxq -- "$VERSION" <<< "$TAGS"; then
+            echo "::error title=Version already published::${IMAGE} version ${VERSION} already exists in GHCR. Increase images/${IMAGE}/VERSION before publishing."
+            exit 1
+          fi
+
       - name: Build and push image
         if: steps.gate.outputs.build == 'true'
         uses: docker/build-push-action@v6

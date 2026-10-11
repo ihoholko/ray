@@ -1,4 +1,4 @@
-FROM rayproject/ray:2.56.1-py312-cu129-aarch64
+FROM rayproject/ray:2.56.1-py312-cu129
 
 USER root
 
